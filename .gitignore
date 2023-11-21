@@ -1,0 +1,6 @@
+/mysql-data/mysql.sock
+/client/node_modules
+/.vs/slnx.sqlite
+*.vsidx
+*.json
+*.sqlite~change

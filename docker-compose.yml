@@ -1,0 +1,135 @@
+version: '3.8'
+
+networks:
+  network1:
+    name: network1
+
+services:
+  apiserver:
+    container_name: apiserver
+    image: apiserver
+    build:
+      context: ./apiServer
+      dockerfile: Dockerfile
+    ports:
+      - "5000:80"
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - NAME=apiserver
+    networks:
+      - network1
+
+  emailservice:
+    container_name: emailservice
+    image: emailservice
+    build:
+      context: ./emailService
+      dockerfile: Dockerfile
+    ports:
+      - "5002:80"
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - NAME=emailservice
+    networks:
+      - network1
+
+  client:
+    container_name: client
+    image: client
+    build:
+      context: ./client
+      dockerfile: DockerFile
+    ports:
+      - "5001:8080"
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    environment:
+      - NAME=client
+    networks:
+      - network1
+
+
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    ports:
+      - "80:80"
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    volumes:
+      - ./nginx.config:/etc/nginx/nginx.conf:ro
+    networks:
+      - network1
+
+
+  phpmyadmin:
+    container_name: phpmyadmin
+    image: phpmyadmin
+    ports:
+      - "1500:80"
+    environment:
+      - PMA_HOST=mysql_db
+    networks:
+      - network1
+
+
+  mysql_db:
+    container_name: mysql_db
+    image: mysql:8.0
+    volumes:
+      - ./mysql-data:/var/lib/mysql
+    networks:
+      - network1
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    ports:
+      - "9000:3306"
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+      timeout: 10s
+      retries: 3
+
+  redis:
+    container_name: redis
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    networks:
+      - network1
+
+  minio:
+    image: quay.io/minio/minio
+    ports:    
+      - 9090:9090
+    container_name: minio1
+    environment:
+      - MINIO_ROOT_USER=ROOTUSER
+      - MINIO_ROOT_PASSWORD=CHANGEME123
+    volumes:
+      - ./data:/data
+    command: server /data --console-address ":9090"
+    networks:
+      - network1
+ 
+  solr:
+    image: solr:latest
+    container_name: solr
+    ports:
+      - "8983:8983"
+    volumes:
+      - ./solr:/var/solr
+    command:
+      - solr-precreate
+      - gettingstarted
+    networks:
+      - network1 
