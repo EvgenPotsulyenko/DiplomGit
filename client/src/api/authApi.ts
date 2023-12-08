@@ -2,12 +2,13 @@ import axios from "axios";
 import { AxiosError } from "axios"
 import type {
     GenericResponse,
+    IAuthResponse,
     ILoginInput,
     ILoginResponse,
     ISignUpInput,
     IUserResponse,
 } from './type';
-
+import MyLocalStorage from "@/services/myLocalStorage";
 import { createToast } from 'mosha-vue-toastify'
 
 
@@ -37,12 +38,16 @@ export const refreshAccessTokenFn = async () => {
 authApi.interceptors.request.use(
     (config) => {
         // Проверяем, есть ли токен в localStorage
-        const token = localStorage.getItem('token');
+        const token = MyLocalStorage.getItem('token');
         //console.log("token:");
        // console.log(token);
         if (token) {
             // Если есть, добавляем его в заголовок Authorization
             config.headers['Authorization'] = `Bearer ${token}`;
+        }
+        // Перевірка, чи дані є об'єктом FormData (для відправки файлів)
+        if (config.data instanceof FormData) {
+            config.headers['Content-Type'] = 'multipart/form-data';
         }
         return config;
     },
@@ -82,15 +87,15 @@ export const signUpUserFn = async (user: ISignUpInput) => {
 
 //авторизація, вхід в систему
 export const loginUserFn = async (user: ILoginInput) => {
-    const response = await authApi.post<ILoginResponse>('auth/AuthUser', user);
+    const response = await authApi.post<IAuthResponse>('auth/AuthUser', user);
     return response.data;
 };
 
 
 export const verifyEmailFn = async (verificationCode: string) => {
     const response = await authApi.get<string>('email/checkcode', {
-        params: {
-            code: verificationCode
+        params:{
+            code:verificationCode
         }
     });
     return response.data;
@@ -111,19 +116,24 @@ export const logoutUserFn = async () => {
 };
 
 // Универсальная функция для отправки запроса
-export const sendRequest = async <T>( method: string,  url: string,  data?: any): Promise<T> => {
+export const sendRequest = async <T>(
+    method: string,
+    url: string,
+    params?: any, // параметри для GET-запиту
+    data?: any): Promise<T> => {
 
     const response = await authApi.request<T>({
         method,
         url,
+        params,
         data,
     });
     return response.data;
 
 };
-/*export const showErrorMessage = function( error : AxiosError){
-    if (error && error.response && error.response.data && error.response.data.message) {
-        createToast(error.response.data.message, {
+export const showErrorMessage = function( error : AxiosError){
+    if (error && error.response && error.response.data && error.response.data) {
+        createToast(error.response.data, {
             position: 'top-right',
             type: 'danger',
         });
@@ -143,7 +153,7 @@ export const sendRequest = async <T>( method: string,  url: string,  data?: any)
     }
 }
 //інформація про користувача(профіль)
-export const getUserFn = async () => {
+/*export const getUserFn = async () => {
     const response = await authApi.get<IUserResponse>('auth/currentUser');
     return response.data;
 };

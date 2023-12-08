@@ -2,9 +2,11 @@
 {
     public class Selected_articles
     {
-        public int Id { get; set; }
-        public int user_id { get; set; }
-        public int article_id { get; set; }
+        public string Id { get; set; }
+        public string user_id { get; set; }
+        public Users? user_ { get; set; }
+        public string article_id { get; set; }
+        public Articles? article_ { get; set; }
         public DateTime Date_view { get; set; }
     }
 }

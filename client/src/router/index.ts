@@ -53,9 +53,21 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
-      path: '/new_article',
-      name: 'new_article',
-      component: ()=>import('../views/NewArticle.vue'),
+      path: '/edit_article/:id',
+      name: 'edit_article',
+      component: ()=>import('../views/EditArticleView.vue'),
+
+    },
+    {
+      path: '/search/:search',
+      name: 'search_article',
+      component: ()=>import('../views/SearchResultView.vue'),
+
+    },
+    {
+      path: '/read_article/:id',
+      name: 'read_article',
+      component: ()=>import('../views/ReadArticleView.vue'),
 
     },
 
