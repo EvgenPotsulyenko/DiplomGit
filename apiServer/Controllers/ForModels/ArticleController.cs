@@ -6,6 +6,10 @@ using apiServer.Controllers.Redis;
 using System.Net;
 using apiServer.Controllers.Solr;
 using Microsoft.EntityFrameworkCore;
+using apiServer.Controllers.Minio;
+using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
+using apiServer.Controllers.Authentication;
 
 namespace apiServer.Controllers.ForModels
 {
@@ -19,8 +23,12 @@ namespace apiServer.Controllers.ForModels
         private readonly FilesController _minioController;
         private readonly RedisArticleController _redisArticleController;
         private readonly SolrArticleController _searchController;
+        private readonly ReactionController _reactionController;
+        private readonly ImagesController _imagesController;
+        private readonly TokensController _tokensController;
+        private readonly string emojiId;
 
-        public ArticleController(ArhivistDbContext context, GenerateRandomStringController genericString, FilesController minioController, SolrArticleController searchController)
+        public ArticleController(ArhivistDbContext context, GenerateRandomStringController genericString, FilesController minioController, SolrArticleController searchController, ReactionController reactionController, ImagesController imagesController, TokensController tokensController)
         {
             _context = context;
             _genericString = genericString;
@@ -28,40 +36,45 @@ namespace apiServer.Controllers.ForModels
             _minioController = minioController;
             _redisArticleController = new RedisArticleController("redis:6379,abortConnect=false");
             _searchController = searchController;
+            _reactionController = reactionController;
+            _imagesController = imagesController;
+            _tokensController = tokensController;
+            emojiId = "1";
         }
+        //[Authorize]
         [HttpGet("GetArticlesForUser")]
-        public async Task<ActionResult<ArticleAndPeople>> GetArticlesForUser(string id_people) // Возвращение статей конкретного пользователя
+        public async Task<List<FullArticle<Articles>>> GetArticlesForUser(string id_people/*, string acessToken, string refreshToken*/) // Возвращение статей конкретного пользователя
         {
             try
             {
-                List<Articles> article = new List<Articles>();
-                //article = _redisArticleController.GetArticlesForUser(id_people);
-                //if (article.Count == 0)
-                //{
-                article = await _context.Articles.Where(a => a.author_id == id_people).Include(a => a.author_).Include(a => a.theory_).ToListAsync();
-                //}
-                return Ok(article);
+                List<FullArticle<Articles>> articleAndReactions = new List<FullArticle<Articles>>();
+                List<Articles> articles = await _context.Articles.Where(a => a.author_id == id_people).Include(a => a.author_).Include(a => a.theory_).ToListAsync();
+                foreach (var article in articles)
+                {
+                    FullArticle<Articles> ar = await _reactionController.GetReactionForArticle<Articles>(article.Id, emojiId, id_people);
+                ar.Selected = _context.Selected_articles.Any(a => a.article_id == article.Id && a.people_id == article.author_id);
+                articleAndReactions.Add(new FullArticle<Articles>
+                { Articles = article, Emotion = ar.Emotion, CountReactions = ar.CountReactions, Selected = ar.Selected
+                });
+                }
+
+                return articleAndReactions;
             }
             catch (Exception ex)
             {
-                return BadRequest("Ошибка, статьи не были обнаруженны - " + ex.Message);
+               throw ex;
             }
         }
-
+        //[Authorize]
         [HttpPost("CreateArticle")]
         public async Task<ActionResult> CreateArticle(Articles? article) // Создание статьи
         {
-            article.Id = Guid.NewGuid().ToString();
-            article.author_id = "eeb84033-8e9a-49c9-bf8e-dc1af18bef57";
-            article.title = "Example2";
-            article.tag = "Example2";
-            article.text = "Example2";
-            article.views = 150;
-            article.theory_id = "2";
-            article.date_created = DateTime.Now;
-            article.modified_date = DateTime.Now;
-            //try
-            //{
+            try
+            {
+                article.Id = Guid.NewGuid().ToString();
+                article.date_created = DateTime.Now;
+                article.modified_date = DateTime.Now;
+                article.IsActive = false;
                 if (CheckDoiValidity(article.DOI) == false)
                 {
                     article.DOI = null;
@@ -69,94 +82,91 @@ namespace apiServer.Controllers.ForModels
                 _context.Articles.Add(article);
                 _context.SaveChanges();
 
-                //добавление данных в Redis
-                _redisArticleController.AddOneModel(article);
 
                 _searchController.AddArticle(article);
 
+                ArticlerResponse articlerResponse = new ArticlerResponse();
+                articlerResponse.Articles = await GetArticlesForUser(article.author_id);
                 if (article.DOI != null)
                 {
-                    return Ok(new { Message = "Вы успешно добавили статью " });
+                    articlerResponse.Response = "Вы успешно добавили статью ";
+                    return Ok(articlerResponse);
                 }
 
-                return Ok(new { Message = "Вы успешно добавили статью, но DOI-идентификатор не прошел проверку" });
-        //}
-        //    catch (Exception ex)
-        //    {
-        //        return BadRequest(new { Error = $"Вы не добавили статью - {ex.Message}" });
-        //    }
-        }
-        [HttpGet("GetArticle")]
-        public async Task<ActionResult<Articles>> GetArticle(string id)
-        {
-            try
-            {
-                Articles article = _redisArticleController.GetData<Articles>(id);
-                if(string.IsNullOrEmpty(article.Id) == true)
-                {
-                    article = await _context.Articles.Include(a => a.author_).Include(a => a.theory_).FirstOrDefaultAsync(a => a.Id == id);
-                }
-
-                return Ok(article);
+                articlerResponse.Response = "Вы успешно добавили статью, но DOI-идентификатор не прошел проверку";
+                return Ok(articlerResponse);
             }
             catch (Exception ex)
             {
-                return Ok("Ошибка, не удалось найти статью - " + ex.Message);
+                throw ex;
             }
         }
-        [HttpPost("RedactArticle")]
-        public async Task<ActionResult> RedactArticle(/*IFormFile? file1, IFormFile? file2,*/ Articles article/*, string id, string title, string pathFile, string pathBucket*/)
+        [HttpGet("GetArticle")]
+        public async Task<ActionResult<FullArticle<Articles>>> GetArticle(string id, string peopleId)
         {
-            //Articles article = new Articles();
-            //article.Id = id;
-            //article.author_id = "eeb84033-8e9a-49c9-bf8e-dc1af18bef57";
-            //article.title = title;
-            //article.tag = "Example2";
-            //article.text = "Example2";
-            //article.views = 0;
-            //article.theory_id = "1";
-            //article.path_file = pathFile;
-            //article.date_created = new DateTime(2023, 11, 17, 17, 16, 16); //ПРИМЕР
-            //var files = new List<IFormFile> { file1, file2 };
-            article.modified_date = DateTime.Now;
-
-            _redisArticleController.AddOneModel(article);
-            _searchController.RedactArticle(article);
-
-            //List<string> FieldsDb = await _minioController.RedactFiles(article.path_file, pathBucket, files);
-
-            //article.path_file = FieldsDb[1];
-            _context.Articles.Update(article);
-            _context.SaveChanges();
-
-            return Ok("Статья удачно сохраненна");
-        }
-        [HttpPost("DeleteArticle")]
-        public async Task<ActionResult> DeleteArticle(Articles? article,/*string? pathFile,*/string? pathBucket/*, string id*/)
-        {
-            //article.Id = id;
-            //article.author_id = "eeb84033-8e9a-49c9-bf8e-dc1af18bef57";
-            //article.title = "ReadactExample2";
-            //article.tag = "Example2";
-            //article.text = "Example2";
-            //article.views = 0;
-            //article.theory_id = "1";
-            //article.path_file = pathFile;
-            // article.date_created = new DateTime(2023, 11, 17, 17, 16, 16); //ПРИМЕР
-            //article.modified_date = DateTime.Now;
-
-            _context.Articles.Remove(article);
-            _context.SaveChanges();
-
-            _searchController.DeleteArticle(article.Id);
-            _redisArticleController.DeleteData(article.Id);
-            if (string.Equals(pathBucket, "") == false || string.Equals(/*pathFile*/article.path_file, "") == false)
+            try
             {
-                _minioController.DeleteFiles(article.path_file, pathBucket);
+                FullArticle<Articles> article = new FullArticle<Articles>();
+            article = await _reactionController.GetReactionForArticle<Articles>(id, emojiId, peopleId);
+            article.Articles = await _context.Articles.Include(a => a.author_).Include(a => a.theory_).FirstOrDefaultAsync(a => a.Id == id);
+            article.Selected = _context.Selected_articles.Any(a => a.article_id == article.Articles.Id && a.people_id == article.Articles.author_id);
+
+             return Ok(article);
             }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+        }
+        //[Authorize]
+        [HttpPost("RedactArticle")]
+        public async Task<ActionResult> RedactArticle(Articles article)
+        {
+            try
+            {
+                article.modified_date = DateTime.Now;
 
+                _redisArticleController.AddOneModel(article);
+                _searchController.RedactArticle(article);
 
-            return Ok("Статья удачно удаленна");
+                //List<string> FieldsDb = await _minioController.RedactFiles(article.path_file, pathBucket, files);
+
+                //article.path_file = FieldsDb[1];
+                _context.Articles.Update(article);
+                _context.SaveChanges();
+
+                return Ok("Статья удачно сохраненна");
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }        
+        }
+        //[Authorize]
+        [HttpPost("DeleteArticle")]
+        public async Task<ActionResult> DeleteArticle(Articles article)
+        {
+            try
+            {
+                _searchController.DeleteArticle(article.Id);
+                //_redisArticleController.DeleteData(article.Id);
+                if (!string.IsNullOrEmpty(article.urls))
+                {
+                    _imagesController.Delete(article);
+                }
+                if (!string.IsNullOrEmpty(article.path_file))
+                {
+                    await _minioController.DeleteFiles(article.Id);
+                }
+                _context.Articles.Remove(article);
+                _context.SaveChanges();
+
+                return Ok("Статья удачно удаленна");
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }       
         }
         [HttpGet("CheckDoiValidity")]
         public bool CheckDoiValidity(string doi)
@@ -185,9 +195,39 @@ namespace apiServer.Controllers.ForModels
             }
             catch (Exception ex)
             {
-                return false; // Произошла ошибка при проверке DOI
+                return false;
             }
         }
-
+        [HttpGet("AddView")]
+        public void AddView(string articleId)
+        {
+            try
+            {
+                Articles articles = _context.Articles.FirstOrDefault(a => a.Id == articleId);
+                articles.views++;
+                _context.Articles.Update(articles);
+                _context.SaveChanges();
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }          
+        }
+        //[Authorize]
+        [HttpGet("PublicationArticle")]
+        public void PublicationArticle(string articleId)
+        {
+            try
+            {
+                Articles articles = _context.Articles.FirstOrDefault(a => a.Id == articleId);
+                articles.IsActive = true;
+                _context.Articles.Update(articles);
+                _context.SaveChanges();
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }          
+        }
     }
 }

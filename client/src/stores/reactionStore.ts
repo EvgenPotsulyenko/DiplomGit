@@ -27,9 +27,12 @@ export const useReactionStore = defineStore({
           try {
               const res = await sendRequest<Array<IEmotion>>(
                   'GET',
-                  'emotion/getEmotions'
+                  'Emotion/GetAllEmotions'
               );
               this.emojiList = res;
+              /*this.emojiList.map((item)=>{
+                  item.isSelected=false;
+              })*/
 
               console.log("emojiList = ", res);
           } catch (error) {
@@ -60,18 +63,18 @@ export const useReactionStore = defineStore({
        },
 
        async saveUserReaction(userReaction: IReaction) {
-           this.isLoading = true;
            try {
                const res = await sendRequest<GenericResponse>(
                    'POST',
-                   'emotion/saveReaction',
+                   'reaction/addReaction',
                    undefined,
                    userReaction
                );
                console.log("saveUserReaction =", res);
            } catch (error) {
                console.error(error);
-               // showErrorMessage(error)
+               throw error;
+
            }finally
            {
                this.isLoading = false;

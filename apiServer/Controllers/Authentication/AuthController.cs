@@ -1,5 +1,6 @@
 ﻿using apiServer.Controllers.Redis;
 using apiServer.Models;
+using apiServer.Models.ForUser;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json.Linq;
@@ -23,22 +24,25 @@ namespace apiServer.Controllers.Authentication
         }
 
         [HttpPost("AuthUser")]
-        public async Task<ActionResult> AuthUser(/*string pas, string email*/UserRequest userRequest) //авторизация
+        public async Task<ActionResult> AuthUser(string pas, string email/*UserRequest userRequest*/) //авторизация
         {
             AuthResponse Response = new AuthResponse();
             try
             {
-                //UserRequest userRequest = new UserRequest();
-                //userRequest.email = email;
-                //userRequest.password = pas;           
+                UserRequest userRequest = new UserRequest();
+                userRequest.email = email;
+                userRequest.password = pas;
 
-                List<Users> users = _redisRepository.GetAllData<Users>();
-                // проверка данных в редис  
+                List<Users> users = _context.Users.ToList();
+
                 for (int i = 0; i < 2; i++)
                 {
                     Response.user = await CheckUserUnique(users, userRequest.password, userRequest.email);
                     if (Response.user != null)
                     {
+                        Response.user.access_token = _tokens.GenerateAccessToken(Response.user.Id);
+                        _context.Users.Update(Response.user);
+                        _context.SaveChanges();
                         _redisRepository.AddOneModel(Response.user);
                         Response.answer = "Вы вошли";                      
                         return Ok(Response);
@@ -47,10 +51,9 @@ namespace apiServer.Controllers.Authentication
                 }
                 return Ok("Вы не вошли");
             }
-            catch
+            catch (Exception ex)
             {
-                Response.answer = "Вы не вошли";
-                return Ok(new { Message = Response });
+                throw ex;
             }
         }
         [HttpGet("CheckUserUnique")]

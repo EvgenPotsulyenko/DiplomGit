@@ -2,19 +2,16 @@ import { defineStore } from 'pinia';
 
 
 import MyLocalStorage from "@/services/myLocalStorage";
-import type {ILoginInput, IUser, ISignUpInput} from "@/api/type";
+import type {ILoginInput, IUser, ISignUpInput, ILoginResponse} from "@/api/type";
 import {
     getRepeatCodeFn,
     loginUserFn,
-    logoutUserFn, showErrorMessage,
+    logoutUserFn, sendRequest, showErrorMessage,
     signUpUserFn,
     verifyEmailFn
 } from '@/api/authApi'
 import { createToast } from 'mosha-vue-toastify';
 import router from '@/router'
-
-
-
 
 
 export type AuthStoreState ={
@@ -29,10 +26,10 @@ export const useAuthStore = defineStore({
     id: 'auth',
     state: ():AuthStoreState => ({
         // initialize state from local storage to enable user to stay logged in
-        authUser: null,//JSON.parse(MyLocalStorage.getItem('user')) ,
-        token:'',// MyLocalStorage.getItem('token') || '',
-        isLogin:false, //MyLocalStorage.getItem('isLogin'),
-        username:'',// MyLocalStorage.getItem('username'),
+        authUser: MyLocalStorage.getItem('user')?(MyLocalStorage.getItem('user')):null,
+        token: MyLocalStorage.getItem('token')? MyLocalStorage.getItem('token'): '',
+        isLogin:MyLocalStorage.getItem('isLogin')?MyLocalStorage.getItem('isLogin')===true:false,
+        username: MyLocalStorage.getItem('username')?MyLocalStorage.getItem('username'):'',
         isLoading:false,
     } ),
     getters:{
@@ -57,47 +54,42 @@ export const useAuthStore = defineStore({
             signUpUserFn(user).then(
                 res=>{
                     this.isLoading = false;
-                    createToast(res.message, {
-                        position: 'top-right',
-                    });
                     MyLocalStorage.setItem('email', user.email);
                    router.push('/verify_email');
                 }
-            ).catch(error => {
+            ).catch((error) => {
                 this.isLoading = false;
-                console.log('error from onRegistration: ',error);
-
-                showErrorMessage(error);
+                console.log('error=',error);
             })
         },
-        onLogin(user:ILoginInput){
+        onLogin(user:ILoginInput, previousRoute:string){
             loginUserFn(user).then(
                 res=>{
-                    console.log("authUser: ",res)
-                    this.token = res.message.user.access_token;
-                    console.log("token: ",res.message.user.access_token);
-                    this.username = res.message.user.login;
+                    this.token = res.user.access_token;
+                    this.username = res.user.login;
                     this.isLogin =true;
-                    this.authUser = res.message.user;
+                    this.authUser = res.user;
                     MyLocalStorage.setItem('token',this.token);
                     MyLocalStorage.setItem('username',this.username);
                     MyLocalStorage.setItem('isLogin',this.isLogin);
                     if(this.authUser!=null){
-                        MyLocalStorage.setItem('user',this.authUser.toString());
+                        MyLocalStorage.setItem('user', this.authUser);
                         MyLocalStorage.setItem('userId',this.authUser.id);
                         MyLocalStorage.setItem('peopleId',this.authUser.people_id);
                         MyLocalStorage.setItem('email', this.authUser.email);
-                        MyLocalStorage.setItem('bucketName', this.authUser.people_!.file_bucket);
+                        MyLocalStorage.setItem('bucketName', this.authUser.people_!.path_bucket);
                     }
-                    if(res.message.user.email_is_checked ===0){
-                        router.push('/verify_email');
+                    if(res.user.email_is_checked ===0){
+                        router.push({path:'/verify_email'}).then((res)=>{
+                            console.log('push_res=',res);
+                        });
+                    }else{
+                        router.push({path: previousRoute});
                     }
-                    createToast("Log in!", {
-                        position: 'bottom-center',
-                    });
-                    console.log('res from onLogin: ',res)
+
                 }
             ).catch(error => {
+                console.log('error=', error)
                 //showErrorMessage(error);
             })
         },
@@ -147,7 +139,60 @@ export const useAuthStore = defineStore({
                 .catch(err=>{
                     console.log('err from RepeatVerificationCode: ',err)
                 })
-        }
+        },
+        async onUpdateUser( updateUser:IUser){
+            console.log("updateUser = ", updateUser)
+            /*sendRequest<ILoginResponse>(
+                    'POST',
+                    'auth/updateUser',
+                    undefined,
+                    updateUser
+            ).then(res=>{
+                this.token = res.user.access_token;
+                console.log("token: ",res.user.access_token);
+                this.authUser = res.user;
+                this.username = res.user.login;
+                MyLocalStorage.setItem('token',this.token);
+                MyLocalStorage.setItem('username',this.username);
+                if(this.authUser!=null){
+                    MyLocalStorage.setItem('user',JSON.stringify(this.authUser));
+                    MyLocalStorage.setItem('userId',this.authUser.id);
+                    MyLocalStorage.setItem('peopleId',this.authUser.people_id);
+                    MyLocalStorage.setItem('email', this.authUser.email);
+                    MyLocalStorage.setItem('bucketName', this.authUser.people_!.path_bucket);
+                }
+                createToast("Log in!", {
+                    position: 'bottom-center',
+                });
+                console.log('res from onLogin: ',res)
+            }).catch(error => {
+                //showErrorMessage(error);
+            })*/
+        },
+        async onSaveAvatar( imageData:FormData){
+            console.log("imageData = ", imageData)
+            /*sendRequest<ILoginResponse>(
+                    'POST',
+                    'auth/updateUser',
+                    undefined,
+                    imageData
+            ).then(res=>{
+                console.log("res: ",res);
+            }).catch(error => {
+                //showErrorMessage(error);
+            })*/
+        },
+        async test() {
+            try{
+                const res = await sendRequest<string>(
+                    'GET',
+                    'Tokens/Check'
+                );
+                console.log("test=", res);
+            }catch (error) {
+                console.error(error);
+            }
+        },
 
     }
 });

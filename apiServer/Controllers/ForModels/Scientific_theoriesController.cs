@@ -18,23 +18,17 @@ namespace apiServer.Controllers.ForModels
             _context = context;
             _redis = new RedisController("redis:6379,abortConnect=false");
         }
-        [HttpGet("GetSiences")]
+        [HttpGet("GetScientific_theories")]
         public async Task<ActionResult<IEnumerable<Scientific_theories>>> GetScientific_theories()
         {
             try
             {
-                List<Scientific_theories> sciences = _redis.GetAllData<Scientific_theories>();
-                if (sciences.Count == 0)
-                {
-                    sciences = await _context.Scientific_theories.Include(a => a.science_).ToListAsync();
-                    _redis.AddData(sciences);
+                     List<Scientific_theories> sciences = await _context.Scientific_theories.Include(a => a.science_).ToListAsync();
                     return sciences;
-                }
-                return sciences;
             }
-           catch (Exception ex)
+            catch (Exception ex)
             {
-                return BadRequest("Ошибка, поднауки не были найденны - " + ex.Message);
+                throw ex;
             }
         }
     }

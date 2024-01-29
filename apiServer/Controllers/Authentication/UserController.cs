@@ -21,14 +21,14 @@ namespace apiServer.Controllers.Authentication
         private readonly TokensController _tokens;
         private readonly EmailController _em;
         private readonly PeopleController _people;
-        public UserController(ArhivistDbContext context, ILogger<UserController> logger, TokensController tokens, IHttpClientFactory httpClientFactory, EmailController em, PeopleController people)
+        public UserController(ArhivistDbContext context, ILogger<UserController> logger, TokensController tokens, IHttpClientFactory httpClientFactory, EmailController em, PeopleController people,EmailController emailController)
         {
             _context = context;
             _logger = logger;
             _tokens = tokens;
             _redisRepository = new RedisController("redis:6379,abortConnect=false");
-            _em = em;
             _people = people;
+            _em = emailController;
         }
         [HttpGet("IsUserUnique")]
         public async Task<int> IsUserUnique(Users Person/* string password, string email*/)
@@ -53,23 +53,26 @@ namespace apiServer.Controllers.Authentication
             }
         }
         [HttpPost("CreateUser")]
-        public async Task<ActionResult> CreateUser(/*string pas, string email*/UserRequest userRequest) //Регистрация
+        public async Task<ActionResult> CreateUser(string password, string email /*UserRequest userRequest*/) //Регистрация
         {
             try
-            {                
-
-                People people = _people.CreatePeople();
+            {
+                People peopleOn = _people.CreatePeople();
+            peopleOn.Id = Guid.NewGuid().ToString();
+            peopleOn.name = /*userRequest.people.name*/ "sadas";
+            peopleOn.surname = /*userRequest.people.surname*/ "dasdas";
+            peopleOn.birthday = /*userRequest.people.birthday*/ DateTime.Now;
 
                 Users FirstEx = new Users();
                 FirstEx.Id = Guid.NewGuid().ToString();
-                FirstEx.login = /*email*/userRequest.email;
-                FirstEx.password = /*pas;*/userRequest.password;
-                FirstEx.email = /*email;*/userRequest.email;
+                FirstEx.login = /*userRequest.*/email;
+                FirstEx.password = /*userRequest.*/password;
+                FirstEx.email = /*userRequest.*/email;
                 FirstEx.date_create = DateTime.Now;
                 FirstEx.modified_date = DateTime.Now;
                 FirstEx.role_id = "1";
 
-                FirstEx.people_id = people.Id;
+                FirstEx.people_id = peopleOn.Id;
                 //Проверка уникальности пользователя по паролю и email
                 if (await IsUserUnique(FirstEx) == 0)
                 {
@@ -77,20 +80,20 @@ namespace apiServer.Controllers.Authentication
                 }
                 else
                 {
-                    var response = await _em.SentCode(/*email*/userRequest.email); //Отправляем письмо пользователю для проверки почты
+                    var response = await _em.SentCode(/*userRequest.*/email); //Отправляем письмо пользователю для проверки почты
                     if (response == "1")
                     {
-                        //// Почта прошла проверку, продолжаем регистрацию
-                        ////генерируем токены
-                        FirstEx.access_token = _tokens.GenerateAccessToken();
-                        FirstEx.refresh_token = _tokens.GenerateRefreshToken();
-                        //// Сохранение пользователя в базе данных
-                        _people.AddPeopleToDb(people);
+                    //// Почта прошла проверку, продолжаем регистрацию
+                    FirstEx.access_token = _tokens.GenerateAccessToken(FirstEx.Id);
+                    //FirstEx.refresh_token = _tokens.GenerateRefreshToken(FirstEx.Id);
+                    //// Сохранение пользователя в базе данных
+                    _people.AddPeopleToDb(peopleOn);
                         _context.Users.Add(FirstEx);
                         _context.SaveChanges();
                         ////Добавляем в редис               
                         _redisRepository.AddOneModel(FirstEx);
-                        return Ok(new { Message = "Регистрация прошла успешно" });
+                    ////генерируем токены                  
+                    return Ok(new { Message = "Регистрация прошла успешно" });
                     }
                     else
                     {
@@ -103,52 +106,7 @@ namespace apiServer.Controllers.Authentication
             }
             catch (Exception ex)
             {
-                return BadRequest(ex.Message);
-            }
-        }
-        [HttpGet("CheckTokens")]
-        public ActionResult CheckTokens(string id, string accessToken, string refreshToken)
-        {
-            try
-            {
-                Users user = new Users();
-                user = _redisRepository.GetData<Users>(id);// Проверка наличия данных в кэше
-                if (user.email == "0") // Данные отсутствуют в кэше, выполняем запрос к базе данных
-                {
-                    user = _context.Users.FirstOrDefault(u => u.access_token == accessToken);
-                }
-                // Поиск пользователя в базе данных по AccessToken пользователя
-                if (_tokens.IsTokenExpired(accessToken) && user != null)
-                {
-                    if (_tokens.IsTokenExpired(refreshToken))
-                    {
-                        return BadRequest(new { Error = "Введите заново емаил и пароль" });
-                    }
-                    else
-                    {
-                        _context.Users.Remove(user);
-                        _redisRepository.DeleteData("users:" + refreshToken);
-                        user.access_token = accessToken = _tokens.GenerateAccessToken();
-                        user.refresh_token = refreshToken = _tokens.GenerateRefreshToken();
-                        _context.Users.Update(user);
-                        _context.SaveChanges();
-                        // Сохранение/обновление данных в кэше на 10 минут                  
-                        _redisRepository.AddOneModel(user);
-                        return Ok(new { Message = "Токены обновлены" });
-                    }
-                }
-                else if (user != null)
-                {
-                    return Ok(new { Message = "Токен НЕ нуждается в обновлении(Пользователю разрешают войти на страницу)" });
-                }
-                else
-                {
-                    return BadRequest(new { Error = "Пользователь не найден" });
-                }
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { ex.Message });
+                throw ex;
             }
         }
         [HttpGet("CheckPasswordAndEmail")]

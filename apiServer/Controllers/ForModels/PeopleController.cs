@@ -1,5 +1,6 @@
 ﻿using apiServer.Controllers.Redis;
 using apiServer.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
@@ -34,9 +35,9 @@ namespace apiServer.Controllers.ForModels
                     return "Add";
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                throw new Exception();
+                throw ex;
             }
 
         }
@@ -51,19 +52,36 @@ namespace apiServer.Controllers.ForModels
                 people.date_create = DateTime.Now;
                 people.modified_date = DateTime.Now;
                 _redisController.AddOneModel(people);
+                
                 return people;
             }
-            catch
+            catch (Exception ex)
             {
-                throw new Exception();
-            }            
+                throw ex;
+            }
         }
-        [HttpGet("GetPeopleFromRedis")]
-        public People GetPeopleFromRedis(string id)
-        {
-            People people = _redisController.GetData<People>(id);
+        //[HttpGet("GetPeopleFromRedis")]
+        //public People GetPeopleFromRedis(string id)
+        //{
+        //    People people = _redisController.GetData<People>(id);
 
-            return people;
+        //    return people;
+        //}
+        //[Authorize]
+        [HttpGet("RedactPeople")]
+        public ActionResult RedactPeople(People people)
+        {
+            try
+            {
+                _context.people.Update(people);
+                _context.SaveChanges();
+
+                return Ok("Данные пользователя удачно обновленны");
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }        
         }
     }
 }

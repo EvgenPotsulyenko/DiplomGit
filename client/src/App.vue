@@ -1,38 +1,49 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import MyNavigationDrawes from "@/components/MyNavigationDrawes.vue";
-import {useAuthStore} from "@/stores/authStore";
 import MyToolbar from "@/components/MyToolbar.vue";
+import Footer from "@/components/Footer.vue";
+import {useRoute} from "vue-router";
+import {computed} from "vue";
+const route = useRoute();
 
-const authStore = useAuthStore();
-const drawer = ref(false)
-function showSideBar(show:boolean){
-  drawer.value=show;
-}
+// Обчислюємо поточний шлях
+const isNotFoundPage = computed(() => {
+  return route.name === 'nofFound';
+
+});
+
+const isDevelopmentPage = computed(() => {
+  return route.name === 'developmentPage';
+ });
+
+const isLoginPage = computed(() => {
+  return route.name === 'login';
+});
 </script>
 <template>
   <v-app id="inspire">
-    <MyNavigationDrawes
-        :user="authStore.authUser"
-        :drawer="drawer"
-    />
 
-    <v-app-bar>
-      <MyToolbar
-      @show="showSideBar"
-      />
+    <v-app-bar v-if="!isNotFoundPage && !isDevelopmentPage">
+      <MyToolbar/>
     </v-app-bar>
 
     <v-main>
-      <v-container fluid>
-        <v-fade-transition>
-          <RouterView />
-        </v-fade-transition>
-
-      </v-container>
+       <RouterView />
     </v-main>
+
+    <v-footer v-if="!isNotFoundPage && !isDevelopmentPage &&!isLoginPage" class="pa-0">
+      <Footer/>
+    </v-footer>
+
   </v-app>
 </template>
+<style>
+.v-input .v-label {
+  font-size: 1.2rem;
+}
+.v-field{
+  font-size: 1.3rem;
+}
+</style>
 
 
 
